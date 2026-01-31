@@ -1,0 +1,481 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>极速拆弹 - 无限随机公平版</title>
+    
+    <!-- 引入 MathJax -->
+    <script>
+        window.MathJax = {
+            tex: { inlineMath: [['$', '$']] },
+            svg: { fontCache: 'global' },
+            startup: {
+                ready: () => {
+                    MathJax.startup.defaultReady();
+                    document.getElementById('loading').style.display = 'none';
+                    document.getElementById('start-btn').style.display = 'inline-block';
+                }
+            }
+        };
+    </script>
+    <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+
+    <style>
+        :root {
+            --bg: #000000;
+            --panel: #1a1a1a;
+            --main-color: #ff3333; /* 红色警戒风 */
+            --accent: #33ff33;     /* 成功绿 */
+            --text: #ffffff;
+        }
+
+        body {
+            margin: 0;
+            background: var(--bg);
+            color: var(--text);
+            font-family: 'Segoe UI', Roboto, sans-serif;
+            height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            overflow: hidden;
+            user-select: none;
+        }
+
+        /* 警戒线背景 */
+        .hazard-bg {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: repeating-linear-gradient(
+                45deg,
+                #111,
+                #111 20px,
+                #222 20px,
+                #222 40px
+            );
+            z-index: 1;
+        }
+
+        /* 游戏面板 */
+        #bomb-casing {
+            position: relative;
+            z-index: 10;
+            width: 900px;
+            max-width: 95%;
+            height: 650px;
+            background: #2b2b2b;
+            border: 5px solid #444;
+            border-radius: 20px;
+            box-shadow: 0 0 50px rgba(0,0,0,0.8);
+            display: flex;
+            flex-direction: column;
+            padding: 20px;
+            box-sizing: border-box;
+        }
+
+        /* 顶部倒计时 */
+        .timer-display {
+            background: #000;
+            color: var(--main-color);
+            font-family: 'Courier New', monospace;
+            font-size: 5rem;
+            text-align: center;
+            border: 2px solid #555;
+            border-radius: 10px;
+            text-shadow: 0 0 20px var(--main-color);
+            margin-bottom: 20px;
+            font-weight: bold;
+            position: relative;
+        }
+
+        .level-badge {
+            position: absolute;
+            left: 20px; top: 20px;
+            font-size: 1.5rem;
+            color: #888;
+        }
+
+        /* 题目区域 */
+        #screen {
+            flex: 1;
+            background: #111;
+            border-radius: 10px;
+            border: 2px solid #333;
+            margin-bottom: 20px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 3rem;
+            color: white;
+            padding: 20px;
+            position: relative;
+        }
+
+        /* 线缆/选项区域 */
+        #wire-panel {
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr 1fr;
+            gap: 15px;
+            height: 120px;
+        }
+
+        .wire-btn {
+            background: linear-gradient(to bottom, #444, #222);
+            border: none;
+            border-radius: 5px;
+            color: white;
+            font-size: 1.5rem;
+            cursor: pointer;
+            position: relative;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            border-bottom: 5px solid #111;
+            transition: transform 0.1s;
+        }
+
+        .wire-btn::before {
+            content: '';
+            position: absolute;
+            top: -15px; left: 50%; transform: translateX(-50%);
+            width: 10px; height: 15px;
+            background: #555; /* 模拟线缆连接头 */
+        }
+
+        .wire-btn:hover { background: #555; }
+        .wire-btn:active { transform: translateY(3px); border-bottom: 2px solid #111; }
+
+        /* 颜色区分线缆 */
+        .wire-btn:nth-child(1) { border-top: 4px solid #e74c3c; } /* 红线 */
+        .wire-btn:nth-child(2) { border-top: 4px solid #3498db; } /* 蓝线 */
+        .wire-btn:nth-child(3) { border-top: 4px solid #f1c40f; } /* 黄线 */
+        .wire-btn:nth-child(4) { border-top: 4px solid #9b59b6; } /* 紫线 */
+
+        /* 遮罩层 */
+        #overlay {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.95);
+            z-index: 100;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            border-radius: 15px;
+            text-align: center;
+        }
+
+        h1 { font-size: 3rem; margin: 0; color: var(--main-color); letter-spacing: 5px; text-transform: uppercase; }
+        p { color: #aaa; font-size: 1.2rem; margin: 20px 0; max-width: 600px; }
+        
+        .start-btn {
+            padding: 15px 50px;
+            font-size: 1.5rem;
+            background: var(--accent);
+            color: black;
+            border: none;
+            border-radius: 50px;
+            cursor: pointer;
+            font-weight: bold;
+            box-shadow: 0 0 20px var(--accent);
+            animation: pulse 1.5s infinite;
+        }
+
+        /* 动画 */
+        @keyframes pulse { 0% { box-shadow: 0 0 10px var(--accent); } 50% { box-shadow: 0 0 30px var(--accent); } 100% { box-shadow: 0 0 10px var(--accent); } }
+        .shake { animation: shake 0.5s cubic-bezier(.36,.07,.19,.97) both; }
+        @keyframes shake { 10%, 90% { transform: translate3d(-2px, 0, 0); } 20%, 80% { transform: translate3d(4px, 0, 0); } 30%, 50%, 70% { transform: translate3d(-8px, 0, 0); } 40%, 60% { transform: translate3d(8px, 0, 0); } }
+
+        .flash-red { animation: flashR 0.3s; }
+        .flash-green { animation: flashG 0.3s; }
+        @keyframes flashR { 0%, 100% { background: #111; } 50% { background: #500; } }
+        @keyframes flashG { 0%, 100% { background: #111; } 50% { background: #050; } }
+
+    </style>
+</head>
+<body>
+
+<div class="hazard-bg"></div>
+
+<div id="bomb-casing">
+    <div id="overlay">
+        <h1>极速拆弹</h1>
+        <p>讲义复习 · 无限题目版</p>
+        <p style="color: #fff; border:1px solid #555; padding: 10px; border-radius: 5px;">
+            <small>⚠️ 公平竞技模式：每次点击开始，系统将实时生成全新数据。下一组无法通过背答案获胜。</small>
+        </p>
+        <div id="loading">正在装填数学引擎...</div>
+        <button id="start-btn" class="start-btn" onclick="startGame()" style="display:none">启动新的挑战</button>
+    </div>
+
+    <div class="level-badge">LEVEL <span id="level-num">1</span></div>
+    <div class="timer-display" id="timer">60.0</div>
+
+    <div id="screen">
+        <!-- 题目 -->
+    </div>
+
+    <div id="wire-panel">
+        <!-- 选项按钮 -->
+    </div>
+</div>
+
+<script>
+    /**
+     * 无限随机题库生成引擎
+     * 针对教案中的4个核心考点，设计了算法生成器
+     */
+    const MathEngine = {
+        // 生成随机整数 [min, max]
+        rand: (min, max) => Math.floor(Math.random() * (max - min + 1)) + min,
+        
+        // 生成干扰项
+        getDistractors: (correctStr, wrongArr) => {
+            // 确保选项不重复
+            let opts = new Set([correctStr]);
+            for(let w of wrongArr) {
+                if(opts.size < 4) opts.add(w);
+            }
+            // 如果还不够4个，随机补
+            while(opts.size < 4) opts.add(Math.floor(Math.random()*100).toString());
+            return Array.from(opts).sort(() => Math.random() - 0.5);
+        },
+
+        // --- 关卡生成器 ---
+
+        // Level 1-2: 概念与有意义条件 (讲义 P3, P6)
+        genConcept: function() {
+            const types = ['cond', 'int']; 
+            const type = types[this.rand(0, 1)];
+
+            if (type === 'cond') {
+                // 生成：若 sqrt(x-a) 有意义，x 的范围
+                const a = this.rand(1, 9);
+                return {
+                    q: `\\text{若 } \\sqrt{x-${a}} \\text{ 有意义，则 } x`,
+                    correct: `\\ge ${a}`,
+                    wrongs: [`> ${a}`, `\\le ${a}`, `\\ne ${a}`]
+                };
+            } else {
+                // 生成：若 sqrt(an+b) 为整数，求最小整数 n (简化版)
+                // 比如 sqrt(8n) 是整数 -> sqrt(2*4*n) -> n=2
+                // 比如 sqrt(12n) -> sqrt(3*4*n) -> n=3
+                const seed = [2, 3, 5, 6, 7][this.rand(0, 4)];
+                const square = [4, 9, 16][this.rand(0, 2)];
+                const val = seed * square; 
+                return {
+                    q: `\\text{若 } \\sqrt{${val}n} \\text{ 是整数，则最小正整数 } n`,
+                    correct: `${seed}`,
+                    wrongs: [`${seed*2}`, `1`, `${val}`]
+                };
+            }
+        },
+
+        // Level 3-5: 基础化简与计算 (讲义 P3, P7)
+        genSimplify: function() {
+            const b = [2, 3, 5, 6, 7][this.rand(0, 4)];
+            const a = this.rand(2, 5); // 系数
+            const val = a * a * b; // 原数
+            
+            // 50% 概率出化简题，50% 概率出性质题 sqrt(a^2)
+            if (Math.random() > 0.5) {
+                // sqrt(12) = 2sqrt(3)
+                return {
+                    q: `\\sqrt{${val}}`,
+                    correct: `${a}\\sqrt{${b}}`,
+                    wrongs: [`${b}\\sqrt{${a}}`, `\\sqrt{${val}}`, `${a*2}\\sqrt{${b}}`]
+                };
+            } else {
+                // sqrt((-a)^2)
+                const num = this.rand(2, 9);
+                return {
+                    q: `\\sqrt{(-${num})^2}`,
+                    correct: `${num}`,
+                    wrongs: [`-${num}`, `\\pm ${num}`, `${num*num}`]
+                };
+            }
+        },
+
+        // Level 6-7: 运算 (讲义 P18)
+        genOperation: function() {
+            // sqrt(8) + sqrt(2) = 3sqrt(2)
+            const base = [2, 3, 5][this.rand(0, 2)];
+            const c1 = this.rand(1, 3);
+            const c2 = this.rand(1, 3);
+            const val1 = c1 * c1 * base;
+            const val2 = c2 * c2 * base;
+            const sumC = c1 + c2;
+            
+            return {
+                q: `\\sqrt{${val1}} + \\sqrt{${val2}}`,
+                correct: `${sumC}\\sqrt{${base}}`,
+                wrongs: [`\\sqrt{${val1+val2}}`, `${Math.abs(c1-c2)}\\sqrt{${base}}`, `${sumC+1}\\sqrt{${base}}`]
+            };
+        },
+
+        // Level 8-10: 压轴复合根式 (讲义 P9-12)
+        // sqrt(m+n + 2sqrt(mn))
+        genCompound: function() {
+            const m = [2, 3, 5, 6, 7][this.rand(0, 4)];
+            // n 通常取 1, 2, 3
+            const n = this.rand(1, 3); 
+            // 避免 m=n 的情况 (虽然数学上没错，但选项不好出)
+            if (m === n) return this.genCompound();
+
+            const sum = m + n;
+            const prod = m * n;
+
+            // 构造答案字符串
+            const ans = n === 1 ? `\\sqrt{${m}}+1` : `\\sqrt{${m}}+\\sqrt{${n}}`;
+            
+            // 构造错误选项
+            const w1 = n === 1 ? `\\sqrt{${m}}-1` : `\\sqrt{${m}}-\\sqrt{${n}}`; // 符号错
+            const w2 = `\\sqrt{${sum}}+\\sqrt{${prod}}`; // 瞎拆
+            const w3 = `${m}+\\sqrt{${n}}`; // 去掉根号错
+
+            return {
+                q: `\\text{化简：}\\sqrt{${sum} + 2\\sqrt{${prod}}}`,
+                correct: ans,
+                wrongs: [w1, w2, w3]
+            };
+        }
+    };
+
+    // --- 游戏主控逻辑 ---
+    let state = {
+        level: 1,
+        maxLevel: 10,
+        timeLeft: 60,
+        timerId: null,
+        isGameOver: false
+    };
+
+    const dom = {
+        overlay: document.getElementById('overlay'),
+        screen: document.getElementById('screen'),
+        wirePanel: document.getElementById('wire-panel'),
+        timer: document.getElementById('timer'),
+        level: document.getElementById('level-num'),
+        title: document.querySelector('#overlay h1'),
+        desc: document.querySelector('#overlay p'),
+        btn: document.getElementById('start-btn')
+    };
+
+    function startGame() {
+        state.level = 1;
+        state.timeLeft = 60;
+        state.isGameOver = false;
+        dom.overlay.style.display = 'none';
+        
+        // 播放开始音效(可选)
+        loadLevel();
+        state.timerId = setInterval(gameLoop, 100);
+    }
+
+    function loadLevel() {
+        if (state.level > state.maxLevel) {
+            winGame();
+            return;
+        }
+
+        dom.level.innerText = `${state.level}/${state.maxLevel}`;
+        
+        // 根据关卡选择题目生成策略
+        let data;
+        if (state.level <= 2) data = MathEngine.genConcept();
+        else if (state.level <= 5) data = MathEngine.genSimplify();
+        else if (state.level <= 7) data = MathEngine.genOperation();
+        else data = MathEngine.genCompound(); // 8-10关 是压轴
+
+        // 渲染题目
+        dom.screen.innerHTML = `$${data.q}$`;
+
+        // 生成选项
+        const options = MathEngine.getDistractors(data.correct, data.wrongs);
+        
+        dom.wirePanel.innerHTML = '';
+        options.forEach(opt => {
+            const btn = document.createElement('button');
+            btn.className = 'wire-btn';
+            btn.innerHTML = `$${opt}$`;
+            btn.onclick = () => handleAnswer(opt === data.correct, btn);
+            dom.wirePanel.appendChild(btn);
+        });
+
+        // 刷新数学公式
+        if(window.MathJax) MathJax.typesetPromise([dom.screen, dom.wirePanel]);
+    }
+
+    function handleAnswer(isCorrect, btn) {
+        if (state.isGameOver) return;
+
+        if (isCorrect) {
+            // 答对：加时 + 视觉反馈
+            state.timeLeft += 5;
+            dom.screen.classList.add('flash-green');
+            setTimeout(() => dom.screen.classList.remove('flash-green'), 300);
+            
+            btn.style.background = '#27ae60'; // 绿
+            
+            setTimeout(() => {
+                state.level++;
+                loadLevel();
+            }, 500);
+        } else {
+            // 答错：扣时 + 震动
+            state.timeLeft -= 10;
+            dom.screen.classList.add('flash-red');
+            setTimeout(() => dom.screen.classList.remove('flash-red'), 300);
+            
+            btn.style.background = '#c0392b'; // 红
+            btn.classList.add('shake');
+            
+            if (state.timeLeft < 0) state.timeLeft = 0; // 防止负数
+        }
+    }
+
+    function gameLoop() {
+        if (state.isGameOver) return;
+
+        state.timeLeft -= 0.1;
+        dom.timer.innerText = state.timeLeft.toFixed(1);
+
+        // 倒计时颜色变化
+        if (state.timeLeft < 10) {
+            dom.timer.style.color = '#e74c3c';
+            if (Math.floor(state.timeLeft * 10) % 5 === 0) {
+                dom.timer.style.borderColor = 'red';
+            } else {
+                dom.timer.style.borderColor = '#555';
+            }
+        } else {
+            dom.timer.style.color = '#ff3333';
+        }
+
+        if (state.timeLeft <= 0) {
+            gameOver();
+        }
+    }
+
+    function gameOver() {
+        state.isGameOver = true;
+        clearInterval(state.timerId);
+        showOverlay("任务失败", `炸弹在第 ${state.level} 关爆炸了！`, "#c0392b", "重新尝试 (生成新题)");
+    }
+
+    function winGame() {
+        state.isGameOver = true;
+        clearInterval(state.timerId);
+        showOverlay("拆弹成功", `剩余时间: ${state.timeLeft.toFixed(1)} 秒`, "#2ecc71", "下一组准备 (生成新题)");
+    }
+
+    function showOverlay(title, desc, color, btnText) {
+        dom.overlay.style.display = 'flex';
+        dom.title.innerText = title;
+        dom.title.style.color = color;
+        dom.desc.innerText = desc;
+        dom.btn.innerText = btnText;
+    }
+
+</script>
+</body>
+</html>
