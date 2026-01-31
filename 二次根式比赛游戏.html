@@ -1,0 +1,520 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>二次根式巅峰对决 (PK版)</title>
+    <style>
+        :root {
+            --p1-color: #4a90e2; /* 蓝方 */
+            --p1-bg: #ebf5ff;
+            --p2-color: #e74c3c; /* 红方 */
+            --p2-bg: #fff0f0;
+            --text-color: #2c3e50;
+        }
+
+        * { box-sizing: border-box; user-select: none; -webkit-user-select: none; }
+
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            background: #333;
+        }
+
+        /* 顶部公共信息栏 */
+        #top-bar {
+            height: 60px;
+            background: #2c3e50;
+            color: white;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 1.5rem;
+            font-weight: bold;
+            z-index: 10;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.3);
+        }
+
+        #timer {
+            background: #34495e;
+            padding: 5px 20px;
+            border-radius: 20px;
+            border: 2px solid #7f8c8d;
+        }
+
+        /* 游戏主区域 - 左右分屏 */
+        #game-arena {
+            flex: 1;
+            display: flex;
+            position: relative;
+        }
+
+        /* 玩家区域通用样式 */
+        .player-zone {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            padding: 10px;
+            position: relative;
+            transition: opacity 0.3s;
+        }
+
+        .player-zone.winner { background-color: #d4efdf; }
+        .player-zone.loser { opacity: 0.5; filter: grayscale(0.8); }
+
+        #p1-zone { background: var(--p1-bg); border-right: 2px solid #bdc3c7; }
+        #p2-zone { background: var(--p2-bg); }
+
+        /* 玩家头部信息 */
+        .player-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+            padding: 0 10px;
+            font-size: 1.2rem;
+            font-weight: bold;
+        }
+
+        .p1-name { color: var(--p1-color); }
+        .p2-name { color: var(--p2-color); }
+
+        /* 进度条 */
+        .progress-bar {
+            height: 8px;
+            width: 100px;
+            background: #ddd;
+            border-radius: 4px;
+            overflow: hidden;
+        }
+        .progress-fill { height: 100%; width: 0%; transition: width 0.3s; }
+        #p1-progress { background: var(--p1-color); }
+        #p2-progress { background: var(--p2-color); }
+
+        /* 卡片网格 - 适配平板 */
+        .grid {
+            flex: 1;
+            display: grid;
+            grid-template-columns: repeat(4, 1fr); /* 4列 */
+            grid-template-rows: repeat(4, 1fr);    /* 4行 */
+            gap: 8px;
+            padding: 5px;
+        }
+
+        /* 卡片样式 */
+        .card {
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            cursor: pointer;
+            position: relative;
+            border-bottom: 4px solid #ccc;
+            transition: transform 0.1s;
+        }
+
+        .card:active { transform: scale(0.95); border-bottom-width: 0; margin-top: 4px; }
+
+        /* 选中状态 */
+        #p1-zone .card.selected { border: 2px solid var(--p1-color); background: #e8f4fd; transform: translateY(-2px); }
+        #p2-zone .card.selected { border: 2px solid var(--p2-color); background: #fdedec; transform: translateY(-2px); }
+
+        /* 匹配成功 */
+        .card.matched {
+            visibility: hidden; /* 匹配后直接消失 */
+            opacity: 0;
+            transition: opacity 0.3s;
+            pointer-events: none;
+        }
+
+        /* 匹配失败抖动 */
+        .card.shake { animation: shake 0.4s; background: #fab1a0; }
+
+        @keyframes shake {
+            0%, 100% { transform: translateX(0); }
+            25% { transform: translateX(-5px); }
+            75% { transform: translateX(5px); }
+        }
+
+        /* 数学公式渲染 */
+        .math-box {
+            font-family: 'Times New Roman', serif;
+            font-size: 1.4rem; /* 平板上字体适中 */
+            font-weight: bold;
+            display: flex;
+            align-items: center;
+        }
+        .sqrt-sym { font-size: 1.1em; margin-right: 1px; }
+        .sqrt-in { border-top: 2px solid currentColor; padding-top: 1px; margin-top: 0.1em; }
+        .coef { margin-right: 2px; }
+
+        /* 遮罩层 (开始/结束) */
+        #overlay {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.85);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 100;
+            backdrop-filter: blur(5px);
+        }
+
+        .modal {
+            background: white;
+            padding: 30px 50px;
+            border-radius: 20px;
+            text-align: center;
+            max-width: 600px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+        }
+
+        h1 { margin: 0 0 10px 0; color: #2c3e50; }
+        p { font-size: 1.2rem; color: #7f8c8d; }
+
+        .btn {
+            background: linear-gradient(to right, #4a90e2, #9b59b6);
+            border: none;
+            color: white;
+            padding: 15px 40px;
+            font-size: 1.5rem;
+            border-radius: 50px;
+            margin-top: 20px;
+            cursor: pointer;
+            box-shadow: 0 5px 15px rgba(74, 144, 226, 0.4);
+            transition: transform 0.2s;
+        }
+        .btn:hover { transform: scale(1.05); }
+
+        #result-title { font-size: 3rem; margin-bottom: 20px; display: block; }
+        .win-p1 { color: var(--p1-color); }
+        .win-p2 { color: var(--p2-color); }
+
+        /* 倒计时动画 */
+        #countdown {
+            font-size: 8rem;
+            color: white;
+            font-weight: bold;
+            display: none;
+            animation: pulse 1s infinite;
+        }
+
+        @keyframes pulse { 0% { transform: scale(1); } 50% { transform: scale(1.2); } 100% { transform: scale(1); } }
+
+        /* 适配竖屏提示 */
+        @media (orientation: portrait) {
+            body::after {
+                content: "请旋转平板至横屏模式以获得最佳对战体验";
+                position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+                background: #2c3e50; color: white;
+                display: flex; justify-content: center; align-items: center;
+                z-index: 200; font-size: 1.5rem; text-align: center; padding: 20px;
+            }
+        }
+    </style>
+</head>
+<body>
+
+<div id="top-bar">
+    <div id="timer">00:00</div>
+</div>
+
+<div id="game-arena">
+    <!-- 玩家1 (左) -->
+    <div class="player-zone" id="p1-zone">
+        <div class="player-header">
+            <span class="p1-name">🔵 蓝队 (P1)</span>
+            <div class="progress-bar"><div class="progress-fill" id="p1-progress-fill"></div></div>
+        </div>
+        <div class="grid" id="p1-grid"></div>
+    </div>
+
+    <!-- 玩家2 (右) -->
+    <div class="player-zone" id="p2-zone">
+        <div class="player-header">
+            <span class="p2-name">🔴 红队 (P2)</span>
+            <div class="progress-bar"><div class="progress-fill" id="p2-progress-fill"></div></div>
+        </div>
+        <div class="grid" id="p2-grid"></div>
+    </div>
+</div>
+
+<!-- 游戏控制层 -->
+<div id="overlay">
+    <div class="modal" id="start-modal">
+        <h1>⚔️ 二次根式巅峰对决</h1>
+        <p>平板双人PK模式</p>
+        <p>规则：左右双方题目相同，看谁先消完！</p>
+        <button class="btn" onclick="startCountdown()">开始对战</button>
+    </div>
+
+    <div class="modal" id="end-modal" style="display: none;">
+        <span id="result-title"></span>
+        <p>耗时: <span id="final-time">0</span> 秒</p>
+        <button class="btn" onclick="startCountdown()">再来一局</button>
+    </div>
+
+    <div id="countdown">3</div>
+</div>
+
+<script>
+    // --- 1. 自动生成海量题库 (核心算法) ---
+    function generateDatabase() {
+        const db = [];
+        // 定义常见的根号内数字 (b)
+        const radicands = [2, 3, 5, 6, 7, 10, 11, 13, 14, 15]; 
+        // 定义系数范围 (a)
+        const maxCoef = 10; 
+
+        radicands.forEach(b => {
+            for (let a = 2; a <= maxCoef; a++) {
+                const rawVal = a * a * b; // 原式数值 = a^2 * b
+                
+                // 过滤掉数值过大的题目，保持在学生口算/简单笔算范围内
+                if (rawVal <= 500) { 
+                    db.push({
+                        raw: rawVal, // √raw
+                        coef: a,     // a
+                        rad: b       // √b
+                    });
+                }
+            }
+        });
+        return db;
+    }
+
+    const FULL_DB = generateDatabase(); 
+    // console.log(`已生成 ${FULL_DB.length} 道题目`); // 测试用
+
+    // --- 游戏状态 ---
+    const GAME_CONFIG = {
+        pairsPerGame: 8, // 每人8对卡片 (16张)
+    };
+
+    let gameState = {
+        isPlaying: false,
+        startTime: 0,
+        timerInterval: null,
+        p1: { selected: [], matches: 0, locked: false },
+        p2: { selected: [], matches: 0, locked: false }
+    };
+
+    // --- DOM 元素 ---
+    const dom = {
+        p1Grid: document.getElementById('p1-grid'),
+        p2Grid: document.getElementById('p2-grid'),
+        timer: document.getElementById('timer'),
+        overlay: document.getElementById('overlay'),
+        startModal: document.getElementById('start-modal'),
+        endModal: document.getElementById('end-modal'),
+        countdown: document.getElementById('countdown'),
+        resultTitle: document.getElementById('result-title'),
+        finalTime: document.getElementById('final-time'),
+        p1Bar: document.getElementById('p1-progress-fill'),
+        p2Bar: document.getElementById('p2-progress-fill'),
+        p1Zone: document.getElementById('p1-zone'),
+        p2Zone: document.getElementById('p2-zone')
+    };
+
+    // --- 辅助函数 ---
+    function shuffle(array) {
+        return array.sort(() => Math.random() - 0.5);
+    }
+
+    function renderMath(isSimple, val, coef, rad) {
+        if (!isSimple) {
+            return `<div class="math-box">
+                        <span class="sqrt-sym">√</span><span class="sqrt-in">${val}</span>
+                    </div>`;
+        } else {
+            return `<div class="math-box">
+                        <span class="coef">${coef}</span>
+                        <span class="sqrt-sym">√</span><span class="sqrt-in">${rad}</span>
+                    </div>`;
+        }
+    }
+
+    // --- 游戏流程 ---
+    function startCountdown() {
+        dom.startModal.style.display = 'none';
+        dom.endModal.style.display = 'none';
+        dom.countdown.style.display = 'block';
+        
+        let count = 3;
+        dom.countdown.innerText = count;
+        
+        // 预先生成数据，防止卡顿
+        prepareGameData();
+
+        const interval = setInterval(() => {
+            count--;
+            if (count > 0) {
+                dom.countdown.innerText = count;
+            } else {
+                clearInterval(interval);
+                dom.countdown.style.display = 'none';
+                dom.overlay.style.display = 'none';
+                startGame();
+            }
+        }, 800);
+    }
+
+    function prepareGameData() {
+        // 重置 UI
+        dom.p1Grid.innerHTML = '';
+        dom.p2Grid.innerHTML = '';
+        dom.p1Bar.style.width = '0%';
+        dom.p2Bar.style.width = '0%';
+        dom.p1Zone.className = 'player-zone';
+        dom.p2Zone.className = 'player-zone';
+        dom.timer.innerText = '00.0';
+
+        // 重置状态
+        gameState = {
+            isPlaying: true,
+            startTime: Date.now(),
+            timerInterval: null,
+            p1: { selected: [], matches: 0, locked: false },
+            p2: { selected: [], matches: 0, locked: false }
+        };
+
+        // 1. 抽取题目 (保证两边题目一样)
+        const selectedQuestions = shuffle([...FULL_DB]).slice(0, GAME_CONFIG.pairsPerGame);
+
+        // 2. 生成卡片组 (raw 和 sim)
+        let deckBase = [];
+        selectedQuestions.forEach((q, idx) => {
+            deckBase.push({ id: idx, type: 'raw', html: renderMath(false, q.raw) });
+            deckBase.push({ id: idx, type: 'sim', html: renderMath(true, null, q.coef, q.rad) });
+        });
+
+        // 3. 分别为 P1 和 P2 打乱卡片 (顺序不同，题目相同)
+        const p1Deck = shuffle([...deckBase]); // 浅拷贝后打乱
+        const p2Deck = shuffle([...deckBase]); 
+
+        // 4. 渲染
+        renderGrid(dom.p1Grid, p1Deck, 'p1');
+        renderGrid(dom.p2Grid, p2Deck, 'p2');
+    }
+
+    function renderGrid(gridEl, deck, playerKey) {
+        deck.forEach(item => {
+            const card = document.createElement('div');
+            card.className = 'card';
+            card.innerHTML = item.html;
+            card.dataset.id = item.id;
+            // 绑定点击事件，传入玩家标识
+            card.addEventListener('mousedown', (e) => handleInput(e, playerKey, card));
+            card.addEventListener('touchstart', (e) => { e.preventDefault(); handleInput(e, playerKey, card); }); // 优化触摸
+            gridEl.appendChild(card);
+        });
+    }
+
+    function startGame() {
+        gameState.startTime = Date.now();
+        gameState.timerInterval = setInterval(() => {
+            const diff = (Date.now() - gameState.startTime) / 1000;
+            dom.timer.innerText = diff.toFixed(1);
+        }, 100);
+    }
+
+    // --- 核心逻辑 ---
+    function handleInput(e, pKey, card) {
+        if (!gameState.isPlaying) return;
+        const pState = gameState[pKey];
+
+        // 检查锁定、已选、已消除
+        if (pState.locked || card.classList.contains('selected') || card.classList.contains('matched')) return;
+
+        // 选中
+        card.classList.add('selected');
+        pState.selected.push(card);
+
+        // 判定
+        if (pState.selected.length === 2) {
+            pState.locked = true; // 锁定该玩家，防止选第三张
+            checkMatch(pKey);
+        }
+    }
+
+    function checkMatch(pKey) {
+        const pState = gameState[pKey];
+        const [c1, c2] = pState.selected;
+        const isMatch = c1.dataset.id === c2.dataset.id;
+
+        if (isMatch) {
+            // 匹配成功
+            setTimeout(() => {
+                c1.classList.remove('selected');
+                c2.classList.remove('selected');
+                c1.classList.add('matched');
+                c2.classList.add('matched');
+                
+                pState.matches++;
+                updateProgress(pKey);
+                
+                pState.selected = [];
+                pState.locked = false;
+
+                // 检查胜利
+                if (pState.matches === GAME_CONFIG.pairsPerGame) {
+                    gameOver(pKey);
+                }
+            }, 200);
+        } else {
+            // 匹配失败
+            setTimeout(() => {
+                c1.classList.add('shake');
+                c2.classList.add('shake');
+            }, 200);
+
+            setTimeout(() => {
+                c1.classList.remove('selected', 'shake');
+                c2.classList.remove('selected', 'shake');
+                pState.selected = [];
+                pState.locked = false;
+            }, 600);
+        }
+    }
+
+    function updateProgress(pKey) {
+        const percent = (gameState[pKey].matches / GAME_CONFIG.pairsPerGame) * 100;
+        const barId = pKey + '-progress-fill';
+        document.getElementById(barId).style.width = percent + '%';
+    }
+
+    function gameOver(winnerKey) {
+        gameState.isPlaying = false;
+        clearInterval(gameState.timerInterval);
+
+        // UI 视觉反馈
+        if (winnerKey === 'p1') {
+            dom.resultTitle.innerHTML = "🏆 蓝队获胜!";
+            dom.resultTitle.className = "win-p1";
+            dom.p1Zone.classList.add('winner');
+            dom.p2Zone.classList.add('loser');
+        } else {
+            dom.resultTitle.innerHTML = "🏆 红队获胜!";
+            dom.resultTitle.className = "win-p2";
+            dom.p2Zone.classList.add('winner');
+            dom.p1Zone.classList.add('loser');
+        }
+
+        dom.finalTime.innerText = dom.timer.innerText;
+        
+        setTimeout(() => {
+            dom.overlay.style.display = 'flex';
+            dom.endModal.style.display = 'block';
+        }, 1000);
+    }
+
+</script>
+</body>
+</html>
